@@ -6,6 +6,8 @@ import sys
 import threading
 import time
 import random
+import json
+import os
 
 import rsa
 
@@ -34,7 +36,7 @@ class Block:
 class BlockChain:
     def __init__(self):
         self.adjust_difficulty_blocks = 10
-        self.difficulty = 1
+        self.difficulty = 5
         self.block_time = 30
         self.miner_rewards = 10
         self.block_limitation = 32
@@ -42,7 +44,7 @@ class BlockChain:
         self.pending_transactions = []
 
         # For P2P connection
-        self.socket_host = "127.0.0.1"
+        self.socket_host = "192.168.0.109"
         self.socket_port = int(sys.argv[1])
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
@@ -216,7 +218,19 @@ class BlockChain:
             return False, "RSA Verified wrong!"
 
     def start(self):
-        address, private = self.generate_address()
+        try:
+            with open(os.path.join("./myaccount.json"), 'r') as json_account:
+                print("Loading account data...")
+                data = json.load(json_account)
+                address = data["address"]
+                private = data["private"]
+        except:
+            print("Can't found account data, start create new one!")
+            address, private = self.generate_address()
+            data = {"address":address, "private": private}
+            with open(os.path.join("./myaccount.json"), 'w') as json_account:
+                account = json.dumps(data)
+                json_account.write(account)
         print(f"Miner address: {address}")
         print(f"Miner private: {private}")
         if len(sys.argv) < 3:

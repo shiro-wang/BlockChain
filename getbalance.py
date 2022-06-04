@@ -218,7 +218,6 @@ class BlockChain:
             return False, "RSA Verified wrong!"
 
     def start(self):
-        print("Start server...")
         try:
             with open(os.path.join("./myaccount.json"), 'r') as json_account:
                 print("Loading account data...")
@@ -234,11 +233,10 @@ class BlockChain:
                 json_account.write(account)
         print(f"Miner address: {address}")
         print(f"Miner private: {private}")
-        if len(sys.argv) < 3:
-            self.create_genesis_block()
-        while(True):
-            self.mine_block(address)
-            self.adjust_difficulty()
+        print("My balance:")
+        print(self.get_balance(address))
+        print("Finish service...")
+        
 
     def start_socket_server(self):
         t = threading.Thread(target=self.wait_for_socket_connection)
