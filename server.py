@@ -44,7 +44,7 @@ class BlockChain:
         self.pending_transactions = []
 
         # For P2P connection
-        self.socket_host = "192.168.0.109"
+        self.socket_host = "127.0.0.1"
         self.socket_port = int(sys.argv[1])
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
@@ -101,11 +101,14 @@ class BlockChain:
         self.pending_transactions.sort(key=lambda x: x.fee, reverse=True)
         if len(self.pending_transactions) > self.block_limitation:
             transcation_accepted = self.pending_transactions[:self.block_limitation]
-            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+            # self.pending_transactions = self.pending_transactions[self.block_limitation:]
+            state = self.block_limitation
         else:
             transcation_accepted = self.pending_transactions
-            self.pending_transactions = []
+            # self.pending_transactions = []
+            state = len(self.pending_transactions)
         block.transactions = transcation_accepted
+        return state
 
     def mine_block(self, miner):
         start = time.process_time()
@@ -113,7 +116,9 @@ class BlockChain:
         last_block = self.chain[-1]
         new_block = Block(last_block.hash, self.difficulty, miner, self.miner_rewards)
 
-        self.add_transaction_to_block(new_block)
+        state = self.add_transaction_to_block(new_block)
+        print("check t num:")
+        print(state)
         new_block.previous_hash = last_block.hash
         new_block.difficulty = self.difficulty
         new_block.hash = self.get_hash(new_block, new_block.nonce)
@@ -128,6 +133,7 @@ class BlockChain:
                 return False
 
         self.broadcast_block(new_block)
+        self.pending_transactions = self.pending_transactions[state:]
 
         time_consumed = round(time.process_time() - start, 5)
         print(f"Hash: {new_block.hash} @ diff {self.difficulty}; {time_consumed}s")
@@ -148,6 +154,8 @@ class BlockChain:
             else:
                 print(f"Average block time:{average_time_consumed}s. High up the difficulty")
                 self.difficulty += 1
+                if self.difficulty > 5:
+                    self.difficulty = 5
 
     def get_balance(self, account):
         balance = 0
@@ -207,15 +215,20 @@ class BlockChain:
         public_key += '\n-----END RSA PUBLIC KEY-----\n'
         public_key_pkcs = rsa.PublicKey.load_pkcs1(public_key.encode('utf-8'))
         transaction_str = self.transaction_to_string(transaction)
-        if transaction.fee + transaction.amounts > self.get_balance(transaction.sender):
-            return False, "Balance not enough!"
+        print("step 1")
+        if (int(transaction.fee) + int(transaction.amounts)) > int(self.get_balance(transaction.sender)):
+            print("Balance not enough!")
+            return False
+        print("step 2")
         try:
             # 驗證發送者
             rsa.verify(transaction_str.encode('utf-8'), signature, public_key_pkcs)
             self.pending_transactions.append(transaction)
-            return True, "Authorized successfully!"
+            print("Authorized successfully!")
+            return True
         except Exception:
-            return False, "RSA Verified wrong!"
+            print("RSA Verified wrong!")
+            return False
 
     def start(self):
         print("Start server...")
@@ -282,15 +295,13 @@ class BlockChain:
                     elif parsed_message["request"] == "transaction":
                         print("Start to transaction for client...")
                         new_transaction = parsed_message["data"]
-                        result, result_message = self.add_transaction(
+                        result = self.add_transaction(
                             new_transaction,
                             parsed_message["signature"]
                         )
-                        response = {
-                            "result": result,
-                            "result_message": result_message
-                        }
+                        
                         if result:
+                            print("Transection vertified success! Broadcast to other nodes...")
                             self.broadcast_transaction(new_transaction)
                     # 接收到同步區塊的請求
                     elif parsed_message["request"] == "clone_blockchain":
@@ -352,6 +363,9 @@ class BlockChain:
     def broadcast_block(self, new_block):
         self.broadcast_message_to_nodes("broadcast_block", new_block)
 
+    def broadcast_transaction_test(self, new_transaction, private):
+        self.broadcast_transaction_to_target("transaction", private, new_transaction)
+
     def broadcast_transaction(self, new_transaction):
         self.broadcast_message_to_nodes("broadcast_transaction", new_transaction)
 
@@ -361,14 +375,51 @@ class BlockChain:
             "request": request,
             "data": data
         }
-        for node_address in self.node_address:
+        for node_address in self.node_address.copy():
             if node_address != address_concat:
                 target_host = node_address.split(":")[0]
                 target_port = int(node_address.split(":")[1])
                 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                client.connect((target_host, target_port))
-                client.sendall(pickle.dumps(message))
-                client.close()
+                try:
+                    client.connect((target_host, target_port))
+                    client.sendall(pickle.dumps(message))
+                    client.close()
+                except:
+                    print("[**] Connect node fail: remove the node: " + node_address)
+                    self.node_address.remove(node_address)
+       
+
+    def sign_transaction(self, transaction, private):
+        private_key = '-----BEGIN RSA PRIVATE KEY-----\n'
+        private_key += private
+        private_key += '\n-----END RSA PRIVATE KEY-----\n'
+        private_key_pkcs = rsa.PrivateKey.load_pkcs1(private_key.encode('utf-8'))
+        transaction_str = self.transaction_to_string(transaction)
+        signature = rsa.sign(transaction_str.encode('utf-8'), private_key_pkcs, 'SHA-1')
+        return signature
+    
+    def broadcast_transaction_to_target(self, request, private, data=None):
+        address_concat = self.socket_host + ":" + str(self.socket_port)
+        
+        message = {
+            "request": request,
+            "data": data,
+            "signature": self.sign_transaction(data, private)
+        }
+        # print("Start send transaction:")
+        # print(message)
+        for node_address in self.node_address.copy():
+            if node_address == data.receiver:
+                target_host = node_address.split(":")[0]
+                target_port = int(node_address.split(":")[1])
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                try:
+                    client.connect((target_host, target_port))
+                    client.sendall(pickle.dumps(message))
+                    client.close()
+                except:
+                    print("[**] Connect node fail: remove the node: " + node_address)
+                    self.node_address.remove(node_address)
 
     def receive_broadcast_block(self, block_data):
         last_block = self.chain[-1]
@@ -386,7 +437,7 @@ class BlockChain:
         else:
             if block_data.hash[0: self.difficulty] == '0' * self.difficulty:
                 for transaction in block_data.transactions:
-                        self.pending_transaction.remove(transaction)
+                        self.pending_transactions.remove(transaction)
                 self.receive_verified_block = True
                 self.chain.append(block_data)
                 return True

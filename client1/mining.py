@@ -119,6 +119,8 @@ class BlockChain:
         new_block = Block(last_block.hash, self.difficulty, miner, self.miner_rewards)
 
         state = self.add_transaction_to_block(new_block)
+        print("check t num:")
+        print(state)
         new_block.previous_hash = last_block.hash
         new_block.difficulty = self.difficulty
         new_block.hash = self.get_hash(new_block, new_block.nonce)
@@ -155,6 +157,8 @@ class BlockChain:
             else:
                 print(f"Average block time:{average_time_consumed}s. High up the difficulty")
                 self.difficulty += 1
+                if self.difficulty > 5:
+                    self.difficulty = 5
 
     def get_balance(self, account):
         balance = 0
@@ -330,8 +334,8 @@ class BlockChain:
                         response = {
                             "message": "Unknown command."
                         }
-                    response_bytes = str(response).encode('utf8')
-                    connection.sendall(response_bytes)
+                    # response_bytes = str(response).encode('utf8')
+                    # connection.sendall(response_bytes)
 
     def clone_blockchain(self, address):
         print(f"Start to clone blockchain by {address}")

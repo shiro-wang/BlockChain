@@ -9,8 +9,6 @@ import random
 import json
 import os
 
-from pkg_resources import require
-
 import rsa
 
 
@@ -46,7 +44,7 @@ class BlockChain:
         self.pending_transactions = []
 
         # For P2P connection
-        self.socket_host = "192.168.0.109"
+        self.socket_host = "127.0.0.1"
         self.socket_port = int(sys.argv[1])
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
@@ -134,7 +132,6 @@ class BlockChain:
 
         self.broadcast_block(new_block)
         self.pending_transactions = self.pending_transactions[state:]
-        
 
         time_consumed = round(time.process_time() - start, 5)
         print(f"Hash: {new_block.hash} @ diff {self.difficulty}; {time_consumed}s")
@@ -229,6 +226,9 @@ class BlockChain:
             print("RSA Verified wrong!")
             return False
 
+    def new_transaction(self, address, receiver, amounts, fee, message, private):
+        new_t = self.initialize_transaction(address, receiver, amounts, fee, message)
+        self.broadcast_transaction_test(new_t, private)
 
     def start(self):
         try:
@@ -246,11 +246,13 @@ class BlockChain:
                 json_account.write(account)
         print(f"Miner address: {address}")
         print(f"Miner private: {private}")
-        if len(sys.argv) < 3:
-            self.create_genesis_block()
-        while(True):
-            self.mine_block(address)
-            self.adjust_difficulty()
+        print("Start create transaction...")
+        receiver = input("Receiver:")
+        amounts = int(input("Amount:"))
+        fee = int(input("fee:"))
+        message = input("Message:")
+        self.new_transaction(address, receiver, amounts, fee, message, private)
+        
 
     def start_socket_server(self):
         t = threading.Thread(target=self.wait_for_socket_connection)
@@ -386,8 +388,6 @@ class BlockChain:
                 except:
                     print("[**] Connect node fail: remove the node: " + node_address)
                     self.node_address.remove(node_address)
-        if request == "broadcast_transaction":
-            print("finish broadcasr_transaction")
 
     def sign_transaction(self, transaction, private):
         private_key = '-----BEGIN RSA PRIVATE KEY-----\n'
