@@ -12,4 +12,5 @@
 broadcast_transaction後，接收端本身遇到的連線問題 (好像可以忽略)
 
 ### 2. prehash掛掉
-目前看來transaction能成功廣播了，但卻遇到了preblock_hash不符的問題?? (不太能理解為何錯)
+目前看來transaction能成功廣播了，但卻遇到了preblock_hash不符的問題??
+-> transaction接收端認證後，沒問題就加進pending內並broadcast叫其他node也加，但此時會有時間差問題，導致接收端在創建新block的時候放進pending而其他node端還沒接收而沒有放進newblock，導致prehash不合

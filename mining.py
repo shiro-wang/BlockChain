@@ -12,6 +12,7 @@ import os
 from pkg_resources import require
 
 import rsa
+from threading import Timer
 
 
 class Transaction:
@@ -56,6 +57,7 @@ class BlockChain:
             self.broadcast_message_to_nodes("add_node", self.socket_host+":"+str(self.socket_port))
         # For broadcast block
         self.receive_verified_block = False
+        # self.receive_vertified_transaction = False
         self.start_socket_server()
 
     def create_genesis_block(self):
@@ -98,27 +100,43 @@ class BlockChain:
         h = s.hexdigest()
         return h
 
+    # def add_transaction_to_pending(self):
+    #     self.pending_receiver.sort(key=lambda x: x.fee, reverse=True)
+    #     if len(self.pending_receiver) > self.block_limitation:
+    #         transcation_accepted = self.pending_receiver[:self.block_limitation]
+    #         self.pending_receiver = self.pending_receiver[self.block_limitation:]
+    #         #state = self.block_limitation
+    #     else:
+    #         transcation_accepted = self.pending_receiver
+    #         self.pending_receiver = []
+    #         #state = len(self.pending_transactions)
+    #     self.pending_transactions = transcation_accepted
+
     def add_transaction_to_block(self, block):
         # Get the transaction with highest fee by block_limitation
         self.pending_transactions.sort(key=lambda x: x.fee, reverse=True)
         if len(self.pending_transactions) > self.block_limitation:
             transcation_accepted = self.pending_transactions[:self.block_limitation]
-            # self.pending_transactions = self.pending_transactions[self.block_limitation:]
-            state = self.block_limitation
+            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+            #state = self.block_limitation
         else:
             transcation_accepted = self.pending_transactions
-            # self.pending_transactions = []
-            state = len(self.pending_transactions)
+            self.pending_transactions = []
+            #state = len(self.pending_transactions)
         block.transactions = transcation_accepted
-        return state
+       # return state
 
     def mine_block(self, miner):
         start = time.process_time()
 
         last_block = self.chain[-1]
         new_block = Block(last_block.hash, self.difficulty, miner, self.miner_rewards)
+        print("check t num before adding:")
+        print(len(self.pending_transactions))
+        # self.add_transaction_to_pending()
+        self.add_transaction_to_block(new_block)
 
-        state = self.add_transaction_to_block(new_block)
+        print("pre_hash: "+ str(last_block.hash) )
         new_block.previous_hash = last_block.hash
         new_block.difficulty = self.difficulty
         new_block.hash = self.get_hash(new_block, new_block.nonce)
@@ -131,9 +149,13 @@ class BlockChain:
                 print(f"[**] Verified received block. Mine next!")
                 self.receive_verified_block = False
                 return False
-
+            # if self.receive_vertified_transaction:
+            #     print(f"[**] Verified received transaction. Reset mining!")
+            #     self.receive_vertified_transaction = False
+            #     block_or_transaction = False
+            #     return False
         self.broadcast_block(new_block)
-        self.pending_transactions = self.pending_transactions[state:]
+        #self.pending_transactions = self.pending_transactions[state:]
         
 
         time_consumed = round(time.process_time() - start, 5)
@@ -155,6 +177,8 @@ class BlockChain:
             else:
                 print(f"Average block time:{average_time_consumed}s. High up the difficulty")
                 self.difficulty += 1
+                if self.difficulty > 5:
+                    self.difficulty = 5
 
     def get_balance(self, account):
         balance = 0
@@ -208,6 +232,9 @@ class BlockChain:
         private_key = private_key.replace(' ', '')
         return private_key
 
+    def actual_add_transaction(self, new_transaction):
+        self.pending_transactions.append(new_transaction)
+
     def add_transaction(self, transaction, signature):
         public_key = '-----BEGIN RSA PUBLIC KEY-----\n'
         public_key += transaction.sender
@@ -222,7 +249,9 @@ class BlockChain:
         try:
             # 驗證發送者
             rsa.verify(transaction_str.encode('utf-8'), signature, public_key_pkcs)
-            self.pending_transactions.append(transaction)
+            t = Timer(15.0, self.actual_add_transaction, [transaction])
+            t.start()
+            # self.pending_transactions.append(transaction)
             print("Authorized successfully!")
             return True
         except Exception:
@@ -300,6 +329,7 @@ class BlockChain:
                         )
                         
                         if result:
+                            # self.receive_vertified_transaction = True
                             print("Transection vertified success! Broadcast to other nodes...")
                             self.broadcast_transaction(new_transaction)
                     # 接收到同步區塊的請求
@@ -319,7 +349,10 @@ class BlockChain:
                     # 接收到廣播的交易
                     elif parsed_message["request"] == "broadcast_transaction":
                         print(f"[*] Receive transaction broadcast by {address}...")
-                        self.pending_transactions.append(parsed_message["data"])
+                        # self.pending_transactions.append(parsed_message["data"])
+                        t = Timer(15.0, self.actual_add_transaction, [parsed_message["data"]])
+                        t.start()
+                        # self.receive_vertified_transaction = True
                         continue
                     # 接收到新增節點的請求
                     elif parsed_message["request"] == "add_node":
@@ -436,8 +469,8 @@ class BlockChain:
             return False
         else:
             if block_data.hash[0: self.difficulty] == '0' * self.difficulty:
-                for transaction in block_data.transactions:
-                        self.pending_transactions.remove(transaction)
+                # for transaction in block_data.transactions:
+                #         self.pending_transactions.remove(transaction)     #不太需要??
                 self.receive_verified_block = True
                 self.chain.append(block_data)
                 return True
