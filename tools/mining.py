@@ -51,6 +51,7 @@ class BlockChain:
         self.socket_port = int(sys.argv[1])
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
+        self.address = ""
         if len(sys.argv) == 3:
             self.clone_blockchain(sys.argv[2])
             print(f"Node list: {self.node_address}")
@@ -177,8 +178,6 @@ class BlockChain:
             else:
                 print(f"Average block time:{average_time_consumed}s. High up the difficulty")
                 self.difficulty += 1
-                if self.difficulty > 5:
-                    self.difficulty = 5
 
     def get_balance(self, account):
         balance = 0
@@ -244,19 +243,20 @@ class BlockChain:
         print("step 1")
         if (int(transaction.fee) + int(transaction.amounts)) > int(self.get_balance(transaction.sender)):
             print("Balance not enough!")
-            return False
+            return False, "Balance not enough!"
         print("step 2")
         try:
             # 驗證發送者
             rsa.verify(transaction_str.encode('utf-8'), signature, public_key_pkcs)
+            transaction.receiver = self.address
             t = Timer(15.0, self.actual_add_transaction, [transaction])
             t.start()
             # self.pending_transactions.append(transaction)
             print("Authorized successfully!")
-            return True
+            return True, "Authorized successfully!"
         except Exception:
             print("RSA Verified wrong!")
-            return False
+            return False, "RSA Verified wrong!"
 
 
     def start(self):
@@ -275,6 +275,7 @@ class BlockChain:
                 json_account.write(account)
         print(f"Miner address: {address}")
         print(f"Miner private: {private}")
+        self.address = address
         if len(sys.argv) < 3:
             self.create_genesis_block()
         while(True):
@@ -323,11 +324,14 @@ class BlockChain:
                     elif parsed_message["request"] == "transaction":
                         print("Start to transaction for client...")
                         new_transaction = parsed_message["data"]
-                        result = self.add_transaction(
+                        result, result_message = self.add_transaction(
                             new_transaction,
                             parsed_message["signature"]
                         )
-                        
+                        response = {
+                            "result": result,
+                            "result_message": result_message
+                        }
                         if result:
                             # self.receive_vertified_transaction = True
                             print("Transection vertified success! Broadcast to other nodes...")

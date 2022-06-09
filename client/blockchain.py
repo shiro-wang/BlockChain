@@ -49,6 +49,7 @@ class BlockChain:
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
         self.address = ""
+        self.private = ""
         if len(sys.argv) == 3:
             self.clone_blockchain(sys.argv[2])
             print(f"Node list: {self.node_address}")
@@ -260,7 +261,7 @@ class BlockChain:
         self.broadcast_transaction_test(new_t, private)
 
     def start(self):
-        print("Start server...")
+        # print("Start server...")
         try:
             with open(os.path.join("./myaccount.json"), 'r') as json_account:
                 print("Loading account data...")
@@ -277,11 +278,56 @@ class BlockChain:
         print(f"Miner address: {address}")
         print(f"Miner private: {private}")
         self.address = address
+        self.private = private
         if len(sys.argv) < 3:
             self.create_genesis_block()
+        print("Please enter number to choose the process you want...")
+        print("1: Mining")
+        print("2: Add transaction")
+        print("3: Show balance")
+        print("4: Try add fake transaction")
+        while True:
+            choise = input()
+            if (choise == "1"):
+                self.start_mining()
+            elif (choise == "2"):
+                self.start_create_transaction()
+                return False
+            elif (choise == "3"):
+                self.start_getbalance()
+                return False
+            elif (choise == "4"):
+                self.start_attack()
+            else:
+                print("Input is not acceptable, please try again")
+    
+    def start_mining(self):
         while(True):
-            self.mine_block(address)
+            self.mine_block(self.address)
             self.adjust_difficulty()
+
+    def start_create_transaction(self):
+        print("Start create transaction...")
+        receiver = input("Receiver:")
+        amounts = int(input("Amount:"))
+        fee = int(input("fee:"))
+        message = input("Message:")
+        self.new_transaction(self.address, receiver, amounts, fee, message, self.private)
+    
+    def start_getbalance(self):
+        print("My balance:")
+        print(self.get_balance(self.address))
+        print("Finish service...")
+
+    def start_attack(self):
+        print("Start add faked transaction")
+        receiver = input("Receiver:")
+        amounts = int(input("Amount:"))
+        fee = int(input("fee:"))
+        message = input("Message:")
+        new_t = self.initialize_transaction(self.address, receiver, amounts, fee, message)
+        self.pending_transactions.append(new_t)
+        self.start_mining()
 
     def start_socket_server(self):
         t = threading.Thread(target=self.wait_for_socket_connection)
