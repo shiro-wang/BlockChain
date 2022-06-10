@@ -116,11 +116,11 @@ class BlockChain:
         self.pending_transactions.sort(key=lambda x: x.fee, reverse=True)
         if len(self.pending_transactions) > self.block_limitation:
             transcation_accepted = self.pending_transactions[:self.block_limitation]
-            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+            #self.pending_transactions = self.pending_transactions[self.block_limitation:]
             #state = self.block_limitation
         else:
             transcation_accepted = self.pending_transactions
-            self.pending_transactions = []
+            #self.pending_transactions = []
             #state = len(self.pending_transactions)
         block.transactions = transcation_accepted
        # return state
@@ -146,6 +146,10 @@ class BlockChain:
             new_block.hash = self.get_hash(new_block, new_block.nonce)
             if self.receive_verified_block:
                 print(f"[**] Verified received block. Mine next!")
+                if len(self.pending_transactions) > self.block_limitation:
+                    self.pending_transactions = self.pending_transactions[self.block_limitation:]
+                else:
+                    self.pending_transactions = []
                 self.receive_verified_block = False
                 return False
             # if self.receive_vertified_transaction:
@@ -154,6 +158,10 @@ class BlockChain:
             #     block_or_transaction = False
             #     return False
         self.broadcast_block(new_block)
+        if len(self.pending_transactions) > self.block_limitation:
+            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+        else:
+            self.pending_transactions = []
         #self.pending_transactions = self.pending_transactions[state:]
 
         time_consumed = round(time.process_time() - start, 5)
@@ -175,6 +183,8 @@ class BlockChain:
             else:
                 print(f"Average block time:{average_time_consumed}s. High up the difficulty")
                 self.difficulty += 1
+                if self.difficulty > 6:
+                    self.difficulty = 6
 
     def get_balance(self, account):
         balance = 0
