@@ -54,7 +54,7 @@ broadcast_transaction後，接收端本身遇到的連線問題 (好像可以忽
 接收block_broadcast時不須重作刪除pending_transaction，在add_transaction_to_block就已經做過，會導致加入block chain出問題，進而導致prehash出錯
 
 ## Debug
-### v1.1.0
+### v1.0.1
 
 1. 修正minings啟動時將pending_transaction移除，其他node才clone，導致transaction沒辦法被複製到
 
