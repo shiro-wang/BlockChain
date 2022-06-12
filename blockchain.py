@@ -176,8 +176,8 @@ class BlockChain:
         new_block = Block(last_block.hash, self.difficulty, miner, self.miner_rewards)
         print("check t num before adding:")
         print(len(self.pending_transactions))
-        self.add_transaction_to_pending()
-
+        self.add_transaction_to_block(new_block)
+        
         new_block.transactions.append(fake_transaction)
 
         print("put in fake transaction then try to find newblock faster than others")
@@ -194,6 +194,10 @@ class BlockChain:
                 print(f"[**] Verified received block. Mine next!")
                 self.receive_verified_block = False
                 print("too slow, try again")
+                if len(self.pending_transactions) > self.block_limitation:
+                    self.pending_transactions = self.pending_transactions[self.block_limitation:]
+                else:
+                    self.pending_transactions = []
                 return False
             # if self.receive_vertified_transaction:
             #     print(f"[**] Verified received transaction. Reset mining!")
@@ -201,14 +205,19 @@ class BlockChain:
             #     block_or_transaction = False
             #     return False
         print("Found newb! broadcast fake block...")
+        if len(self.pending_transactions) > self.block_limitation:
+            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+        else:
+            self.pending_transactions = []
         self.pending_transactions = self.pending_transactions[self.block_limitation:]
         self.broadcast_block(new_block)
-        return False
+        
         #self.pending_transactions = self.pending_transactions[state:]
 
         time_consumed = round(time.process_time() - start, 5)
         print(f"Hash: {new_block.hash} @ diff {self.difficulty}; {time_consumed}s")
         self.chain.append(new_block)
+        return False
     def adjust_difficulty(self):
         if len(self.chain) % self.adjust_difficulty_blocks != 1:
             return self.difficulty
@@ -363,19 +372,23 @@ class BlockChain:
         fee = int(input("fee:"))
         message = input("Message:")
         self.new_transaction(self.address, receiver, amounts, fee, message, self.private)
+        
     
     def start_getbalance(self):
         print("My balance:")
         print(self.get_balance(self.address))
         print("Finish service...")
+        while(True):
+            self.adjust_difficulty()
 
     def start_attack(self):
         print("Start add faked transaction")
+        sender = input("Sender:")
         receiver = input("Receiver:")
         amounts = int(input("Amount:"))
         fee = int(input("fee:"))
         message = input("Message:")
-        fake_t = self.initialize_transaction(self.address, receiver, amounts, fee, message)
+        fake_t = self.initialize_transaction(sender, receiver, amounts, fee, message)
         while True:
             self.fake_mining(self.address, fake_t)
             self.adjust_difficulty()
@@ -574,6 +587,7 @@ class BlockChain:
                 #         self.pending_transactions.remove(transaction)     #不太需要??
                 self.receive_verified_block = True
                 self.chain.append(block_data)
+                self.adjust_difficulty()
                 return True
             else:
                 print(f"[**] Received block error: Hash not matched by diff!")

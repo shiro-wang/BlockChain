@@ -59,3 +59,7 @@ broadcast_transaction後，接收端本身遇到的連線問題 (好像可以忽
 1. 修正minings啟動時將pending_transaction移除，其他node才clone，導致transaction沒辦法被複製到
 
 2. 為了驗證方便，將difficulty上限限制在6
+
+### v1.0.2
+
+1. 修正使用其他功能時，無法跟著調整difficulty導致hash不符

@@ -42,9 +42,9 @@ class BlockChain:
         self.block_limitation = 32
         self.chain = []
         self.pending_transactions = []
-
+        
         # For P2P connection
-        self.socket_host = "127.0.0.1"
+        self.socket_host = "25.52.48.55"
         self.socket_port = int(sys.argv[1])
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
@@ -289,9 +289,10 @@ class BlockChain:
         self.address = address
         if len(sys.argv) < 3:
             self.create_genesis_block()
-        while(True):
-            self.mine_block(address)
-            self.adjust_difficulty()
+
+        # while(True):
+        #     self.mine_block(address)
+        #     self.adjust_difficulty()
 
     def start_socket_server(self):
         t = threading.Thread(target=self.wait_for_socket_connection)
@@ -487,6 +488,8 @@ class BlockChain:
                 #         self.pending_transactions.remove(transaction)     #不太需要??
                 self.receive_verified_block = True
                 self.chain.append(block_data)
+                
+                self.adjust_difficulty()
                 return True
             else:
                 print(f"[**] Received block error: Hash not matched by diff!")

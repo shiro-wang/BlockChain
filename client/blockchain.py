@@ -44,7 +44,7 @@ class BlockChain:
         self.pending_transactions = []
 
         # For P2P connection
-        self.socket_host = "127.0.0.1"
+        self.socket_host = "25.52.48.55"
         self.socket_port = int(sys.argv[1])
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
@@ -117,11 +117,11 @@ class BlockChain:
         self.pending_transactions.sort(key=lambda x: x.fee, reverse=True)
         if len(self.pending_transactions) > self.block_limitation:
             transcation_accepted = self.pending_transactions[:self.block_limitation]
-            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+            #self.pending_transactions = self.pending_transactions[self.block_limitation:]
             #state = self.block_limitation
         else:
             transcation_accepted = self.pending_transactions
-            self.pending_transactions = []
+            #self.pending_transactions = []
             #state = len(self.pending_transactions)
         block.transactions = transcation_accepted
        # return state
@@ -147,6 +147,10 @@ class BlockChain:
             new_block.hash = self.get_hash(new_block, new_block.nonce)
             if self.receive_verified_block:
                 print(f"[**] Verified received block. Mine next!")
+                if len(self.pending_transactions) > self.block_limitation:
+                    self.pending_transactions = self.pending_transactions[self.block_limitation:]
+                else:
+                    self.pending_transactions = []
                 self.receive_verified_block = False
                 return False
             # if self.receive_vertified_transaction:
@@ -155,12 +159,65 @@ class BlockChain:
             #     block_or_transaction = False
             #     return False
         self.broadcast_block(new_block)
+        if len(self.pending_transactions) > self.block_limitation:
+            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+        else:
+            self.pending_transactions = []
         #self.pending_transactions = self.pending_transactions[state:]
 
         time_consumed = round(time.process_time() - start, 5)
         print(f"Hash: {new_block.hash} @ diff {self.difficulty}; {time_consumed}s")
         self.chain.append(new_block)
 
+    def fake_mining(self, miner, fake_transaction):
+        start = time.process_time()
+
+        last_block = self.chain[-1]
+        new_block = Block(last_block.hash, self.difficulty, miner, self.miner_rewards)
+        print("check t num before adding:")
+        print(len(self.pending_transactions))
+        self.add_transaction_to_block(new_block)
+        
+        new_block.transactions.append(fake_transaction)
+
+        print("put in fake transaction then try to find newblock faster than others")
+        print("pre_hash: "+ str(last_block.hash) )
+        new_block.previous_hash = last_block.hash
+        new_block.difficulty = self.difficulty
+        new_block.hash = self.get_hash(new_block, new_block.nonce)
+        new_block.nonce = random.getrandbits(32)
+
+        while new_block.hash[0: self.difficulty] != '0' * self.difficulty:
+            new_block.nonce += 1
+            new_block.hash = self.get_hash(new_block, new_block.nonce)
+            if self.receive_verified_block:
+                print(f"[**] Verified received block. Mine next!")
+                self.receive_verified_block = False
+                print("too slow, try again")
+                if len(self.pending_transactions) > self.block_limitation:
+                    self.pending_transactions = self.pending_transactions[self.block_limitation:]
+                else:
+                    self.pending_transactions = []
+                return False
+            # if self.receive_vertified_transaction:
+            #     print(f"[**] Verified received transaction. Reset mining!")
+            #     self.receive_vertified_transaction = False
+            #     block_or_transaction = False
+            #     return False
+        print("Found newb! broadcast fake block...")
+        if len(self.pending_transactions) > self.block_limitation:
+            self.pending_transactions = self.pending_transactions[self.block_limitation:]
+        else:
+            self.pending_transactions = []
+        self.pending_transactions = self.pending_transactions[self.block_limitation:]
+        self.broadcast_block(new_block)
+        
+        #self.pending_transactions = self.pending_transactions[state:]
+
+        time_consumed = round(time.process_time() - start, 5)
+        print(f"Hash: {new_block.hash} @ diff {self.difficulty}; {time_consumed}s")
+        self.chain.append(new_block)
+        return False
     def adjust_difficulty(self):
         if len(self.chain) % self.adjust_difficulty_blocks != 1:
             return self.difficulty
@@ -176,6 +233,8 @@ class BlockChain:
             else:
                 print(f"Average block time:{average_time_consumed}s. High up the difficulty")
                 self.difficulty += 1
+                if self.difficulty > 6:
+                    self.difficulty = 6
 
     def get_balance(self, account):
         balance = 0
@@ -313,21 +372,26 @@ class BlockChain:
         fee = int(input("fee:"))
         message = input("Message:")
         self.new_transaction(self.address, receiver, amounts, fee, message, self.private)
+        
     
     def start_getbalance(self):
         print("My balance:")
         print(self.get_balance(self.address))
         print("Finish service...")
+        while(True):
+            self.adjust_difficulty()
 
     def start_attack(self):
         print("Start add faked transaction")
+        sender = input("Sender:")
         receiver = input("Receiver:")
         amounts = int(input("Amount:"))
         fee = int(input("fee:"))
         message = input("Message:")
-        new_t = self.initialize_transaction(self.address, receiver, amounts, fee, message)
-        self.pending_transactions.append(new_t)
-        self.start_mining()
+        fake_t = self.initialize_transaction(sender, receiver, amounts, fee, message)
+        while True:
+            self.fake_mining(self.address, fake_t)
+            self.adjust_difficulty()
 
     def start_socket_server(self):
         t = threading.Thread(target=self.wait_for_socket_connection)
@@ -523,6 +587,7 @@ class BlockChain:
                 #         self.pending_transactions.remove(transaction)     #不太需要??
                 self.receive_verified_block = True
                 self.chain.append(block_data)
+                self.adjust_difficulty()
                 return True
             else:
                 print(f"[**] Received block error: Hash not matched by diff!")
