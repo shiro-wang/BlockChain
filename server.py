@@ -44,7 +44,7 @@ class BlockChain:
         self.pending_transactions = []
         
         # For P2P connection
-        self.socket_host = "25.52.48.55"
+        self.socket_host = "192.168.1.1"    #在這調換成自己的ip位置
         self.socket_port = int(sys.argv[1])
         self.node_address = {f"{self.socket_host}:{self.socket_port}"}
         self.connection_nodes = {}
@@ -290,9 +290,9 @@ class BlockChain:
         if len(sys.argv) < 3:
             self.create_genesis_block()
 
-        # while(True):
-        #     self.mine_block(address)
-        #     self.adjust_difficulty()
+        while(True):
+            self.mine_block(address)
+            self.adjust_difficulty()
 
     def start_socket_server(self):
         t = threading.Thread(target=self.wait_for_socket_connection)
