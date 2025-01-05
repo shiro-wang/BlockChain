@@ -1,4 +1,3 @@
-
 import hashlib
 import pickle
 import socket
@@ -11,54 +10,24 @@ import os
 
 import rsa
 from threading import Timer
-
-class Transaction:
-    def __init__(self, sender, receiver, amounts, fee, message):
-        self.sender = sender
-        self.receiver = receiver
-        self.amounts = amounts
-        self.fee = fee
-        self.message = message
-
-
-class Block:
-    def __init__(self, previous_hash, difficulty, miner, miner_rewards):
-        self.previous_hash = previous_hash
-        self.hash = ''
-        self.difficulty = difficulty
-        self.nonce = 0
-        self.timestamp = int(time.time())
-        self.transactions = []
-        self.miner = miner
-        self.miner_rewards = miner_rewards
-
-
-class BlockChain:
-    def __init__(self):
-        self.adjust_difficulty_blocks = 10
-        self.difficulty = 5
-        self.block_time = 30
-        self.miner_rewards = 10
-        self.block_limitation = 32
+from Architecture.Transaction import Transaction
+from Architecture.Block import Block
+class BaseBlockChain:
+    def __init__(self, p2p_connection, args):
+        self.adjust_difficulty_blocks = args.adjust_difficulty_blocks
+        self.difficulty = args.difficulty
+        self.block_time = args.block_time
+        self.miner_rewards = args.miner_rewards
+        self.block_limitation = args.block_limitation
         self.chain = []
         self.pending_transactions = []
-
-        # For P2P connection
-        self.socket_host = "25.52.48.55"
-        self.socket_port = int(sys.argv[1])
-        self.node_address = {f"{self.socket_host}:{self.socket_port}"}
-        self.connection_nodes = {}
-        self.address = ""
-        self.private = ""
-        if len(sys.argv) == 3:
-            self.clone_blockchain(sys.argv[2])
-            print(f"Node list: {self.node_address}")
-            self.broadcast_message_to_nodes("add_node", self.socket_host+":"+str(self.socket_port))
-        # For broadcast block
+        self.p2p_connection = p2p_connection  # 使用 P2PConnection 類別
+        self.socket_host = self.p2p_connection.socket_host
+        self.socket_port = self.p2p_connection.socket_port
+        self.node_address = self.p2p_connection.node_address
+        # Broadcast block
         self.receive_verified_block = False
-        # self.receive_vertified_transaction = False
-        self.start_socket_server()
-
+    
     def create_genesis_block(self):
         print("Create genesis block...")
         new_block = Block('Hello World!', self.difficulty, 'lkm543', self.miner_rewards)
@@ -99,34 +68,13 @@ class BlockChain:
         h = s.hexdigest()
         return h
 
-    # def add_transaction_to_pending(self):
-    #     self.pending_receiver.sort(key=lambda x: x.fee, reverse=True)
-    #     if len(self.pending_receiver) > self.block_limitation:
-    #         transcation_accepted = self.pending_receiver[:self.block_limitation]
-    #         self.pending_receiver = self.pending_receiver[self.block_limitation:]
-    #         #state = self.block_limitation
-    #     else:
-    #         transcation_accepted = self.pending_receiver
-    #         self.pending_receiver = []
-    #         #state = len(self.pending_transactions)
-    #     self.pending_transactions = transcation_accepted
-
-
     def add_transaction_to_block(self, block):
         # Get the transaction with highest fee by block_limitation
         self.pending_transactions.sort(key=lambda x: x.fee, reverse=True)
-        if len(self.pending_transactions) > self.block_limitation:
-            transcation_accepted = self.pending_transactions[:self.block_limitation]
-            #self.pending_transactions = self.pending_transactions[self.block_limitation:]
-            #state = self.block_limitation
-        else:
-            transcation_accepted = self.pending_transactions
-            #self.pending_transactions = []
-            #state = len(self.pending_transactions)
-        block.transactions = transcation_accepted
+        block.transactions = self.pending_transactions[:self.block_limitation]
        # return state
 
-    def mine_block(self, miner):
+    def mine_block(self, miner, force_stop=False):
         start = time.process_time()
 
         last_block = self.chain[-1]
@@ -153,71 +101,17 @@ class BlockChain:
                     self.pending_transactions = []
                 self.receive_verified_block = False
                 return False
-            # if self.receive_vertified_transaction:
-            #     print(f"[**] Verified received transaction. Reset mining!")
-            #     self.receive_vertified_transaction = False
-            #     block_or_transaction = False
-            #     return False
+
         self.broadcast_block(new_block)
         if len(self.pending_transactions) > self.block_limitation:
             self.pending_transactions = self.pending_transactions[self.block_limitation:]
         else:
             self.pending_transactions = []
-        #self.pending_transactions = self.pending_transactions[state:]
 
         time_consumed = round(time.process_time() - start, 5)
         print(f"Hash: {new_block.hash} @ diff {self.difficulty}; {time_consumed}s")
         self.chain.append(new_block)
-
-    def fake_mining(self, miner, fake_transaction):
-        start = time.process_time()
-
-        last_block = self.chain[-1]
-        new_block = Block(last_block.hash, self.difficulty, miner, self.miner_rewards)
-        print("check t num before adding:")
-        print(len(self.pending_transactions))
-        self.add_transaction_to_block(new_block)
-        
-        new_block.transactions.append(fake_transaction)
-
-        print("put in fake transaction then try to find newblock faster than others")
-        print("pre_hash: "+ str(last_block.hash) )
-        new_block.previous_hash = last_block.hash
-        new_block.difficulty = self.difficulty
-        new_block.hash = self.get_hash(new_block, new_block.nonce)
-        new_block.nonce = random.getrandbits(32)
-
-        while new_block.hash[0: self.difficulty] != '0' * self.difficulty:
-            new_block.nonce += 1
-            new_block.hash = self.get_hash(new_block, new_block.nonce)
-            if self.receive_verified_block:
-                print(f"[**] Verified received block. Mine next!")
-                self.receive_verified_block = False
-                print("too slow, try again")
-                if len(self.pending_transactions) > self.block_limitation:
-                    self.pending_transactions = self.pending_transactions[self.block_limitation:]
-                else:
-                    self.pending_transactions = []
-                return False
-            # if self.receive_vertified_transaction:
-            #     print(f"[**] Verified received transaction. Reset mining!")
-            #     self.receive_vertified_transaction = False
-            #     block_or_transaction = False
-            #     return False
-        print("Found newb! broadcast fake block...")
-        if len(self.pending_transactions) > self.block_limitation:
-            self.pending_transactions = self.pending_transactions[self.block_limitation:]
-        else:
-            self.pending_transactions = []
-        self.pending_transactions = self.pending_transactions[self.block_limitation:]
-        self.broadcast_block(new_block)
-        
-        #self.pending_transactions = self.pending_transactions[state:]
-
-        time_consumed = round(time.process_time() - start, 5)
-        print(f"Hash: {new_block.hash} @ diff {self.difficulty}; {time_consumed}s")
-        self.chain.append(new_block)
-        return False
+    
     def adjust_difficulty(self):
         if len(self.chain) % self.adjust_difficulty_blocks != 1:
             return self.difficulty
@@ -233,11 +127,12 @@ class BlockChain:
             else:
                 print(f"Average block time:{average_time_consumed}s. High up the difficulty")
                 self.difficulty += 1
-                if self.difficulty > 6:
-                    self.difficulty = 6
+                if self.difficulty > 5:
+                    self.difficulty = 5
 
     def get_balance(self, account):
-        balance = 0
+        # account initial money amount
+        balance = 100
         for block in self.chain:
             # Check miner reward
             miner = False
@@ -304,6 +199,7 @@ class BlockChain:
         #print("step 2")
         try:
             # 驗證發送者
+            print("Start to verify sender...")
             rsa.verify(transaction_str.encode('utf-8'), signature, public_key_pkcs)
             transaction.receiver = self.address
             t = Timer(15.0, self.actual_add_transaction, [transaction])
@@ -318,81 +214,7 @@ class BlockChain:
     def new_transaction(self, address, receiver, amounts, fee, message, private):
         new_t = self.initialize_transaction(address, receiver, amounts, fee, message)
         self.broadcast_transaction_test(new_t, private)
-
-    def start(self):
-        # print("Start server...")
-        try:
-            with open(os.path.join("./myaccount.json"), 'r') as json_account:
-                print("Loading account data...")
-                data = json.load(json_account)
-                address = data["address"]
-                private = data["private"]
-        except:
-            print("Can't found account data, start create new one!")
-            address, private = self.generate_address()
-            data = {"address":address, "private": private}
-            with open(os.path.join("./myaccount.json"), 'w') as json_account:
-                account = json.dumps(data)
-                json_account.write(account)
-        print(f"Miner address: {address}")
-        print(f"Miner private: {private}")
-        self.address = address
-        self.private = private
-        if len(sys.argv) < 3:
-            self.create_genesis_block()
-        print("Please enter number to choose the process you want...")
-        print("1: Mining")
-        print("2: Add transaction")
-        print("3: Show balance")
-        print("4: Try add fake transaction")
-        while True:
-            choise = input()
-            if (choise == "1"):
-                self.start_mining()
-            elif (choise == "2"):
-                self.start_create_transaction()
-                return False
-            elif (choise == "3"):
-                self.start_getbalance()
-                return False
-            elif (choise == "4"):
-                self.start_attack()
-            else:
-                print("Input is not acceptable, please try again")
     
-    def start_mining(self):
-        while(True):
-            self.mine_block(self.address)
-            self.adjust_difficulty()
-
-    def start_create_transaction(self):
-        print("Start create transaction...")
-        receiver = input("Receiver:")
-        amounts = int(input("Amount:"))
-        fee = int(input("fee:"))
-        message = input("Message:")
-        self.new_transaction(self.address, receiver, amounts, fee, message, self.private)
-        
-    
-    def start_getbalance(self):
-        print("My balance:")
-        print(self.get_balance(self.address))
-        print("Finish service...")
-        while(True):
-            self.adjust_difficulty()
-
-    def start_attack(self):
-        print("Start add faked transaction")
-        sender = input("Sender:")
-        receiver = input("Receiver:")
-        amounts = int(input("Amount:"))
-        fee = int(input("fee:"))
-        message = input("Message:")
-        fake_t = self.initialize_transaction(sender, receiver, amounts, fee, message)
-        while True:
-            self.fake_mining(self.address, fake_t)
-            self.adjust_difficulty()
-
     def start_socket_server(self):
         t = threading.Thread(target=self.wait_for_socket_connection)
         t.start()
@@ -524,16 +346,7 @@ class BlockChain:
         }
         for node_address in self.node_address.copy():
             if node_address != address_concat:
-                target_host = node_address.split(":")[0]
-                target_port = int(node_address.split(":")[1])
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    client.connect((target_host, target_port))
-                    client.sendall(pickle.dumps(message))
-                    client.close()
-                except:
-                    print("[**] Connect node fail: remove the node: " + node_address)
-                    self.node_address.remove(node_address)
+                self.connect_to_node(node_address, message)
        
 
     def sign_transaction(self, transaction, private):
@@ -545,9 +358,7 @@ class BlockChain:
         signature = rsa.sign(transaction_str.encode('utf-8'), private_key_pkcs, 'SHA-1')
         return signature
     
-    def broadcast_transaction_to_target(self, request, private, data=None):
-        address_concat = self.socket_host + ":" + str(self.socket_port)
-        
+    def broadcast_transaction_to_target(self, request, private, data=None):      
         message = {
             "request": request,
             "data": data,
@@ -557,16 +368,19 @@ class BlockChain:
         # print(message)
         for node_address in self.node_address.copy():
             if node_address == data.receiver:
-                target_host = node_address.split(":")[0]
-                target_port = int(node_address.split(":")[1])
-                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                try:
-                    client.connect((target_host, target_port))
-                    client.sendall(pickle.dumps(message))
-                    client.close()
-                except:
-                    print("[**] Connect node fail: remove the node: " + node_address)
-                    self.node_address.remove(node_address)
+                self.connect_to_node(node_address, message)
+    
+    def connect_to_node(self, node_address, message):
+        target_host = node_address.split(":")[0]
+        target_port = int(node_address.split(":")[1])
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            client.connect((target_host, target_port))
+            client.sendall(pickle.dumps(message))
+            client.close()
+        except:
+            print(f"[**] Connect node fail: remove the node: {node_address}")
+            self.node_address.remove(node_address)
 
     def receive_broadcast_block(self, block_data):
         last_block = self.chain[-1]
@@ -592,7 +406,3 @@ class BlockChain:
             else:
                 print(f"[**] Received block error: Hash not matched by diff!")
                 return False
-
-if __name__ == '__main__':
-    block = BlockChain()
-    block.start()
